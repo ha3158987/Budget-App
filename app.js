@@ -1,4 +1,5 @@
-//*****************************************************************1st module: BUDGET CONTROLLER
+//1st module: BUDGET CONTROLLER**********************************************************************************
+//******************************************************************************************************************* */
 const budgetController = (function () {
   //expense & income 데이터가 계속적으로 추가될 것이기 때문에 생성자 함수를 이용하는 것이 가장 효율적.
   //id는 추가되는 정보가 expense 인지 income 인지를 구분한다.
@@ -104,7 +105,8 @@ const budgetController = (function () {
   };
 })();
 
-//*****************************************************************2nd module: UI CONTROLLER
+//2nd module: UI CONTROLLER*****************************************************************************************
+//******************************************************************************************************************* */
 const UIController = (function () {
   //DOM 요소를 가져오는 코드를 저장해 두는 곳. 코드가 중복되고 너무 장황해지는 것을 방지.
   //이렇게하면 UI에서 클래스 이름을 바꾸고 싶다고 해도 전부 다 바꿀 필요 없이 여기에서만 바꿔주면 됨.
@@ -115,6 +117,10 @@ const UIController = (function () {
     inputButton: ".add__btn",
     incomeContainer: ".income__list",
     expensesContainer: ".expenses__list",
+    budgetLabel: ".budget__value",
+    incomeLabel: ".budget__income--value",
+    expensesLabel: ".budget__expenses--value",
+    percentageLabel: ".budget__expenses--percentage",
   };
 
   //public method
@@ -177,6 +183,22 @@ const UIController = (function () {
       fieldsArr[0].focus();
     },
 
+    //DOM manupulation = UI 상단에 나타나는 최종 금액, expenses & income 등등/ getBudget 프로퍼티에 있는 네임들을 가져옴
+    displayBudget: function (obj) {
+      document.querySelector(DOMstrings.budgetLabel).textContent = obj.budget;
+      document.querySelector(DOMstrings.incomeLabel).textContent = obj.totalInc;
+      document.querySelector(DOMstrings.expensesLabel).textContent =
+        obj.totalExp;
+
+      // -1이 아닐때만 여기에 % 기호를 더하고 -1일때는 다른 것이 나타나도록 설정. 즉, 0%보다 클 때만 나타나도록
+      if (obj.percentage > 0) {
+        document.querySelector(DOMstrings.percentageLabel).textContent =
+          obj.percentage + "%";
+      } else {
+        document.querySelector(DOMstrings.percentageLabel).textContent = "-";
+      }
+    },
+
     //controller 모듈에서는 DOMstrings 객체에 접근을 할 수 없기 때문에 또 하나의 메소드를 만든다.
     getDOMstrings: function () {
       return DOMstrings; //exposing DOMstrings to public!
@@ -184,7 +206,8 @@ const UIController = (function () {
   };
 })();
 
-//**************************************************************3rd module - GLOBAL APP CONTROLLER/이벤트를 컨트롤하는 센트럴
+//3rd module - GLOBAL APP CONTROLLER/이벤트를 컨트롤하는 센트럴**************************************************************
+//******************************************************************************************************************* */
 const controller = (function (budgetCtrl, UICtrl) {
   const setupEventListeners = function () {
     const DOM = UICtrl.getDOMstrings();
@@ -208,8 +231,8 @@ const controller = (function (budgetCtrl, UICtrl) {
     //2. Return the budget(get~) budget을 저장해서 UI에 넘겨줄 것
     var budget = budgetCtrl.getBudget();
 
-    //3. Display the budget on the UI
-    console.log(budget);
+    //3. Display the budget on the UI - 위 라인의 budget변수에 담긴 객체를 매개변수로 가져온다.
+    UICtrl.displayBudget(budget);
   };
 
   //버튼이 눌리면(click이 되면) 일어나야 하는 일
@@ -238,6 +261,12 @@ const controller = (function (budgetCtrl, UICtrl) {
   return {
     init: function () {
       console.log("Application has started.");
+      UICtrl.displayBudget({
+        budget: 0,
+        totalInc: 0,
+        totalExp: 0,
+        percentage: -1,
+      }); //시작과 동시에 상단 budget UI가 나타나게 하되,budget이 아니라 모두 '0'으로 시작. getBudget에서 객체 복사해서 값만 '0'으로 바꿈.
       setupEventListeners();
     },
   };
