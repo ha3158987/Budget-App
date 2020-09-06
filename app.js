@@ -45,6 +45,9 @@ const budgetController = (function () {
     //아이템 하나를 더할 때마다 필요한 정보들 - exp/inc, description, value
     addItem: function (type, des, val) {
       var newItem, ID;
+      //[1, 2, 3, 4, 5], next ID = 6
+      //[1, 2, 4, 6, 8], next ID = 9
+      // ID = last ID + 1
 
       //create new ID
       //ID:unique # that we want to assign to each new item that we put either in the expense or in the income arrays for the allitems. 아아템이 각 배열의 '몇번째' 아이템인지 알려주는 숫자. 다만 id는 '딱 한번'만 쓰여야 하고, 사용자가 중간중간 아이템을 지워도 유효하게 하려면, 마지막으로 더해진 숫자 + 1이 되어야 한다. ID = last ID + 1
@@ -68,6 +71,30 @@ const budgetController = (function () {
       //Return the new element - 다른 모듈에서 여기서 만들어진 item 객체를 반환받게끔.
       return newItem;
     },
+
+    //item삭제 다루기 - another public method
+    deleteItem: function (type, id) {
+      var ids, index;
+      //id = 6
+      //data.allItems[type][id];
+      //ex. [1, 2, 4, 6, 8]
+      //index = 3
+      //이 예제는 중간에 3, 5, 7이 삭제되었다고 가정했을 떄의 배열. 그러면 id를 인덱스로 받아서 삭제한다고 하면 id = 3(인덱스 3)을 지운다고 3이 지워지는 것이 아니라 6이 지워지게 됨. 즉, index# !== id#. 따라서, loop을 돌려서 "input ID"를 이용해 각 ID의 "index"를 가진 배열을 반환받는다. = ids배열을 만들어야 하는 이유
+
+      ids = data.allItems[type].map(function (current) {
+        //map은 콜백함수를 받고, 현재요소, 현재인덱스, 배열을 parameter로 받을 수 있다. forEach와의 차이점은 map은 새로운 배열을 반환한다는 것이다.
+        return current.id;
+      });
+
+      //매개변수 id로 들어온 값의 '진짜 index'를 빈환한다. 만약에 찾는 요소가 배열에 없을 경우 '-1'을 반환한다. 따라서 if 조건을 주어야함.
+      index = ids.indexOf(id);
+
+      //splice로 요소를 삭제 (첫번째 인자는 start, 두번째 인자는 delete count) - 배열 직접 변경하고, 삭제된 요소들의 배열을 반환함.
+      if (index !== -1) {
+        data.allItems[type].splice(index, 1);
+      }
+    },
+
     //total income 과 total expense, 그리고 expense가 income에서 차지하는 퍼센트(%)를 다룬다.
     calculateBudget: function () {
       //calculate total income and expenses
@@ -121,6 +148,7 @@ const UIController = (function () {
     incomeLabel: ".budget__income--value",
     expensesLabel: ".budget__expenses--value",
     percentageLabel: ".budget__expenses--percentage",
+    container: ".container",
   };
 
   //public method
@@ -142,11 +170,11 @@ const UIController = (function () {
       if (type === "inc") {
         element = DOMstrings.incomeContainer;
         html =
-          '<div class="item clearfix" id="income-%id%"><div class="item__description">%description%</div><div class="right clearfix"><div class="item__value">%value%</div><div class="item__delete"><button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button></div></div></div>';
+          '<div class="item clearfix" id="inc-%id%"><div class="item__description">%description%</div><div class="right clearfix"><div class="item__value">%value%</div><div class="item__delete"><button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button></div></div></div>';
       } else if (type === "exp") {
         element = DOMstrings.expensesContainer;
         html =
-          '<div class="item clearfix" id="expense-%id%"><div class="item__description">%description%</div><div class="right clearfix"><div class="item__value">%value%</div><div class="item__percentage">21%</div><div class="item__delete"><button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button></div></div></div>';
+          '<div class="item clearfix" id="exp-%id%"><div class="item__description">%description%</div><div class="right clearfix"><div class="item__value">%value%</div><div class="item__percentage">21%</div><div class="item__delete"><button class="item__delete--btn"><i class="ion-ios-close-outline"></i></button></div></div></div>';
       }
       //2; Replace the placeholder text with some actual data
       //처음 써보는 메소드! replace는 replace(바꾸고자하는곳, replace할것); 으로 사용
@@ -156,6 +184,12 @@ const UIController = (function () {
 
       //3; Insert the HTML into the DOM
       document.querySelector(element).insertAdjacentHTML("beforeend", newHtml);
+    },
+
+    deleteListItem: function (selectorID) {
+      //selectorID은 entire ID(income-0, income-1 etc.)이 되어야함.
+      var el = document.getElementById(selectorID); //이게 지우고 싶은 element
+      el.parentNode.removeChild(el); //parent로 올라갔다가 다시 child로 내려오는 방식으로 삭제(자바스크립트는 removeChild기능밖에 없음)
     },
 
     //또 다른 public method - 한번 정보 입력 시 입력란이 clear되고, 다시 첫번째 입력란으로 커서가 옮겨가는 기능
@@ -220,6 +254,10 @@ const controller = (function (budgetCtrl, UICtrl) {
         ctrlAddItem();
       }
     });
+    //DOMstrings객체가 이 함수에서는 변수 DOM에 담기기 때문에 DOM으로 가지고 오기
+    document
+      .querySelector(DOM.container)
+      .addEventListener("click", ctrlDeleteItem);
   };
 
   //이 두가지 to-do는 성격이 같고, item을 삭제할 때에도 필요하기 때문에 따로 함수를 만들어 묶어준다. DRY규칙을 따르기 위해서.
@@ -256,6 +294,33 @@ const controller = (function (budgetCtrl, UICtrl) {
       updateBudget();
     }
   };
+
+  //여기서 event bubbling up이 일어나야 함. 타고 올라가 어느 요소에서부터 이벤트가 일어났는지 추적함.
+  const ctrlDeleteItem = function (event) {
+    //delet하고 싶은 건 단순히 x 아이콘(혹은 버튼)이 아니라 해당 item으로 추가된 모든 상위 요소들!! 가장 높은 parent요소에 event를 걸어 delegate event.
+    //DOM traversing
+    var itemID, splitID, type, ID;
+    //event.target은 delete button
+    itemID = event.target.parentNode.parentNode.parentNode.parentNode.id;
+    //여기서 id란 income-0, income-1,,,
+    if (itemID) {
+      //모든 string은 원시값(primitive)이기 때문에 'split' 메소드에 access를 가지고 있음. "배열"로 반환해줌.
+      //ex. inc-1 => ["inc", "1"]
+      splitID = itemID.split("-");
+      type = splitID[0];
+      ID = parseInt(splitID[1]); //split이 반환해주는 것은 "string"!! 그런데 budgetCtrl에서 지워야 하는 것은 "number"이기 떄문에 sting => number 해주기.
+
+      //1. delete the item from the data structure
+      budgetCtrl.deleteItem(type, ID);
+
+      //2. delete the item from the UI
+      UICtrl.deleteListItem(itemID); //itemID는 entire ID(income-0, income-1 etc.)가 되어야함.
+
+      //3. Update and show the new budget
+      updateBudget();
+    }
+  };
+
   //여태까지는 IIFE 내부에 위치해 실행시키는 것에 대해 걱정하지 않았지만 여러 요소들을 함수로 묶어줌으로써 함수 실행을 init함수로 컨트롤할 예정.
   //이것은 public레벨에 있어야 하므로 '객체'로 만드는 것이 적합.
   return {
