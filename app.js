@@ -8,6 +8,22 @@ const budgetController = (function () {
     this.id = id;
     this.description = description;
     this.value = value;
+    this.percentage = -1; //없을 경우 -1
+  };
+
+  //expense로 더해지는 모든 item은 생성자함수 Expense를 통해 만들어지는 것이므로 여기에 prototype을 더해줘서 모든 instance가 percentage계산하는 프로퍼티를 가지고 생성되도록 할 것.
+  //percent를 계산하는 로직
+  Expense.prototype.calcPercentage = function (totalIncome) {
+    if (totalIncome > 0) {
+      this.percentage = Math.round((this.value / totalIncome) * 100);
+    } else {
+      this.percentage = -1;
+    }
+  };
+
+  //계산된 percent를 반환해주는 로직
+  Expense.prototype.getPercentage = function () {
+    return this.percentage;
   };
 
   var Income = function (id, description, value) {
@@ -115,6 +131,28 @@ const budgetController = (function () {
       }
     },
 
+    calculatePercentages: function () {
+      /*
+       income = 100
+       expense
+        a = 20 (20%)
+        b = 10 (10%)
+        c = 40 (40%)
+        */
+      //loop over exp array
+      data.allItems.exp.forEach(function (current) {
+        current.calcPercentage(data.totals.inc);
+      });
+    },
+
+    getPercentage: function () {
+      //forEach대신 map을 사용하는 이유는 값을 저장해야하기 때문에 새로운 배열을 반환해주는 map을 이용해야함.
+      var allPercentages = data.allItems.exp.map(function (current) {
+        return current.getPercentage();
+      });
+      return allPercentages;
+    },
+
     getBudget: function () {
       //property를 만드는 함수를 만든다. value들을 담을 ..
       return {
@@ -149,6 +187,47 @@ const UIController = (function () {
     expensesLabel: ".budget__expenses--value",
     percentageLabel: ".budget__expenses--percentage",
     container: ".container",
+    expensePercLabel: ".item__percentage",
+    dateLabel: ".budget__title--month",
+  };
+
+  var formatNumber = function (num, type) {
+    var numSplit, int, dec, type;
+    /*
+      + or - before number
+      show exactly up to 2 decimal points
+      comma separating the thousands
+      ex.
+      2310.4567 -> + 2,310.46
+      2000 -> + 2,000.00
+      */
+
+    num = Math.abs(num); //num변수에는 절대값이 담김. 절대값으로 override하는 것.
+    num = num.toFixed(2); //toFixed는 number.prototype의 메소드!!!!!Math의 메소드가 아님. 문자열을 반환함.
+
+    //소수점자리(decimal)와 정수자리(integer)를 나눔
+    numSplit = num.split(".");
+
+    //장수자리
+    int = numSplit[0];
+    //split에서 값을 받은 int는 아직 string인 상태. .length를 쓸 수가 있음. "1,000" 글자가 3개 이상이면 콤마
+    if (int.length > 3) {
+      int = int.substr(0, int.length - 3) + "," + int.substr(int.length - 3, 3);
+      //인덱스 0에서 시작해서 1개의 글자를 반환. ex. 245030 -> 245,030
+    }
+
+    //소숫점자리
+    dec = numSplit[1];
+
+    return (type === "exp" ? "-" : "+") + " " + int + "." + dec;
+  };
+
+  //nodelist에 반복문을 실행하는 reusable code를 만드는 것. 매번 forEach를 사용할 필요가 없어짐.
+  var nodeListForEach = function (list, callback) {
+    for (var i = 0; i < list.length; i++) {
+      //밑의 callback함수 매개변수인 current, index를 전달
+      callback(list[i], i);
+    }
   };
 
   //public method
@@ -180,7 +259,7 @@ const UIController = (function () {
       //처음 써보는 메소드! replace는 replace(바꾸고자하는곳, replace할것); 으로 사용
       newHtml = html.replace("%id%", obj.id);
       newHtml = newHtml.replace("%description%", obj.description);
-      newHtml = newHtml.replace("%value%", obj.value);
+      newHtml = newHtml.replace("%value%", formatNumber(obj.value, type));
 
       //3; Insert the HTML into the DOM
       document.querySelector(element).insertAdjacentHTML("beforeend", newHtml);
@@ -219,10 +298,20 @@ const UIController = (function () {
 
     //DOM manupulation = UI 상단에 나타나는 최종 금액, expenses & income 등등/ getBudget 프로퍼티에 있는 네임들을 가져옴
     displayBudget: function (obj) {
-      document.querySelector(DOMstrings.budgetLabel).textContent = obj.budget;
-      document.querySelector(DOMstrings.incomeLabel).textContent = obj.totalInc;
-      document.querySelector(DOMstrings.expensesLabel).textContent =
-        obj.totalExp;
+      //상단 budget display UI에 + / - 사인 붙이기
+      obj.budget > 0 ? (type = "inc") : (type = "exp");
+
+      document.querySelector(DOMstrings.budgetLabel).textContent = formatNumber(
+        obj.budget,
+        type
+      );
+      document.querySelector(DOMstrings.incomeLabel).textContent = formatNumber(
+        obj.totalInc,
+        "inc"
+      );
+      document.querySelector(
+        DOMstrings.expensesLabel
+      ).textContent = formatNumber(obj.totalExp, "exp");
 
       // -1이 아닐때만 여기에 % 기호를 더하고 -1일때는 다른 것이 나타나도록 설정. 즉, 0%보다 클 때만 나타나도록
       if (obj.percentage > 0) {
@@ -231,6 +320,65 @@ const UIController = (function () {
       } else {
         document.querySelector(DOMstrings.percentageLabel).textContent = "-";
       }
+    },
+
+    //exp item 우측의 percent(%)표시하기
+    //매개변수로 받는 percentages는 '배열'.
+    displayPercentages: function (percentages) {
+      //item이 몇개가 될 지 모르기때문에 querySelectorAll을 사용. 여기서는 그냥 list가 아닌 nodeList를 반환하는데 html으로 이루어진 DOM tree에서는 각각의 element를 'node'라고 부르기 때문.
+      var fields = document.querySelectorAll(DOMstrings.expensePercLabel);
+
+      //매개변수 list: fields, callback: function(current, index){};
+      nodeListForEach(fields, function (current, index) {
+        // do stuff
+        if (percentages[index] > 0) {
+          current.textContent = percentages[index] + "%";
+        } else {
+          current.textContent = "-";
+        }
+      });
+    },
+
+    //실시간 날짜 및 연도 정보 UI에 업데이트하기
+    displayMonth: function () {
+      var now, month, months, year;
+      now = new Date();
+      //month는 숫자로 표기되기 때문에 글자로 표기하기 위해 배열을 만듦.
+      months = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+      month = now.getMonth();
+      year = now.getFullYear();
+      document.querySelector(DOMstrings.dateLabel).textContent =
+        months[month] + " " + year;
+    },
+
+    changeType: function () {
+      var fields = document.querySelectorAll(
+        //빨간색으로 변하는 효과를 줄 모든 elements들을 nodelist 만들기
+        DOMstrings.inputType +
+          "," +
+          DOMstrings.inputDescription +
+          "," +
+          DOMstrings.inputValue
+      );
+      //global스코프에 있는 반복메소드 재사용
+      nodeListForEach(fields, function (cur) {
+        cur.classList.toggle("red-focus");
+      });
+      //체크버튼 색상 바꾸기
+      document.querySelector(DOMstrings.inputButton).classList.toggle("red");
     },
 
     //controller 모듈에서는 DOMstrings 객체에 접근을 할 수 없기 때문에 또 하나의 메소드를 만든다.
@@ -258,6 +406,11 @@ const controller = (function (budgetCtrl, UICtrl) {
     document
       .querySelector(DOM.container)
       .addEventListener("click", ctrlDeleteItem);
+
+    //change event 사용하기
+    document
+      .querySelector(DOM.inputType)
+      .addEventListener("change", UICtrl.changeType);
   };
 
   //이 두가지 to-do는 성격이 같고, item을 삭제할 때에도 필요하기 때문에 따로 함수를 만들어 묶어준다. DRY규칙을 따르기 위해서.
@@ -271,6 +424,18 @@ const controller = (function (budgetCtrl, UICtrl) {
 
     //3. Display the budget on the UI - 위 라인의 budget변수에 담긴 객체를 매개변수로 가져온다.
     UICtrl.displayBudget(budget);
+  };
+
+  //percent는 item이 더해지거나 삭제될 때마다 업데이트가 매번 되어야 함. updateBudget처럼 따로 함수를 만들어서 ctrlAddItem & ctrlDeleteItem에 각각 추가해줘야한다.
+  const updatePercentages = function () {
+    //1. calculate percentages
+    budgetCtrl.calculatePercentages();
+
+    //2. Read percentages from the budget controller
+    var percentages = budgetCtrl.getPercentage();
+
+    //3. Update the UI with the new percentages
+    UICtrl.displayPercentages(percentages);
   };
 
   //버튼이 눌리면(click이 되면) 일어나야 하는 일
@@ -292,6 +457,9 @@ const controller = (function (budgetCtrl, UICtrl) {
 
       //5. Calculate and update budget
       updateBudget();
+
+      //6. Calculate and update percentages
+      updatePercentages();
     }
   };
 
@@ -318,6 +486,9 @@ const controller = (function (budgetCtrl, UICtrl) {
 
       //3. Update and show the new budget
       updateBudget();
+
+      //4. Calculate and update percentages
+      updatePercentages();
     }
   };
 
@@ -326,6 +497,7 @@ const controller = (function (budgetCtrl, UICtrl) {
   return {
     init: function () {
       console.log("Application has started.");
+      UICtrl.displayMonth();
       UICtrl.displayBudget({
         budget: 0,
         totalInc: 0,
